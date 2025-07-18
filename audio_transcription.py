@@ -27,8 +27,10 @@ LOG_FILE = "audio_transcription_errors.log"
 
 # =================== ENV + LOGGING ===================
 
+# Load environment variables
 load_dotenv()
 
+# Fetch the API key from environment
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 logging.basicConfig(
