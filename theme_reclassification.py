@@ -107,7 +107,7 @@ Only return the theme from the list above. No explanation.
 
 
 def reclassify_with_rules_and_gpt(batch_size=BATCH_SIZE):
-    offset = 0
+    last_id = 0
     batch_num = 1
 
     try:
@@ -126,30 +126,33 @@ def reclassify_with_rules_and_gpt(batch_size=BATCH_SIZE):
 
     try:
         while True:
-            logging.info(f"\n📦 Processing batch {batch_num} (offset: {offset})...")
+            logging.info(f"\n📦 Processing batch {batch_num} (last_id: {last_id})...")
 
             query = f"""
                 SELECT {ID_COLUMN}, {TEXT_COLUMN}, {THEME_COLUMN}
                 FROM {SCHEMA_NAME}.{TABLE_NAME}
                 WHERE 
-                  ({THEME_COLUMN} LIKE '%,%' OR {THEME_COLUMN} IS NULL OR TRIM({THEME_COLUMN}) = '')
-                  AND {TEXT_COLUMN} IS NOT NULL AND TRIM({TEXT_COLUMN}) <> ''
-                  AND {QUESTION_COLUMN} = 'query'
+                {ID_COLUMN} > %s
+                AND ({THEME_COLUMN} LIKE '%%,%%' OR {THEME_COLUMN} IS NULL OR TRIM({THEME_COLUMN}) = '')
+                AND {TEXT_COLUMN} IS NOT NULL AND TRIM({TEXT_COLUMN}) <> ''
+                AND {QUESTION_COLUMN} = 'query'
                 ORDER BY {ID_COLUMN}
-                LIMIT {batch_size} OFFSET {offset}
+                LIMIT {batch_size}
             """
-            df = pd.read_sql_query(query, con=conn)
+            df = pd.read_sql_query(query, con=conn, params=(last_id,))
+
 
             if df.empty:
                 logging.info("✅ No more rows to classify.")
                 break
 
+            # Apply rules
             df["new_theme"] = df[TEXT_COLUMN].apply(match_theme_rule)
             rule_hits = df["new_theme"].notnull().sum()
 
+            # GPT fallback
             null_indices = df[df["new_theme"].isnull()].index
             texts_to_classify = df.loc[null_indices, TEXT_COLUMN].tolist()
-
             logging.info(f"🤖 GPT fallback for {len(texts_to_classify)} rows...")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -170,23 +173,24 @@ def reclassify_with_rules_and_gpt(batch_size=BATCH_SIZE):
             logging.info(f"🧠 GPT matched: {gpt_hits}")
             logging.info(f"🔁 Records to update: {updated_count}")
 
-            log_rows = []
-            for _, row in updates.iterrows():
-                log_rows.append({
-                    "id": row[ID_COLUMN],
-                    "old_theme": row[THEME_COLUMN] if pd.notnull(row[THEME_COLUMN]) else "<null>",
-                    "new_theme": row["new_theme"],
-                    "text": row[TEXT_COLUMN],
-                    "batch": batch_num
-                })
-
-            if log_rows:
+            # Log CSV
+            if updated_count > 0:
+                log_rows = []
+                for _, row in updates.iterrows():
+                    log_rows.append({
+                        "id": row[ID_COLUMN],
+                        "old_theme": row[THEME_COLUMN] if pd.notnull(row[THEME_COLUMN]) else "<null>",
+                        "new_theme": row["new_theme"],
+                        "text": row[TEXT_COLUMN],
+                        "batch": batch_num
+                    })
                 log_df = pd.DataFrame(log_rows)
                 log_file = f"theme_reclassification_log_batch_{batch_num}_{timestamp}.csv"
                 log_df["timestamp"] = datetime.now().isoformat()
                 log_df.to_csv(log_file, index=False)
                 logging.info(f"📄 Log written: {log_file}")
 
+            # Update DB
             if DRY_RUN:
                 logging.info("🔒 DRY RUN – skipping DB update.")
             else:
@@ -198,16 +202,16 @@ def reclassify_with_rules_and_gpt(batch_size=BATCH_SIZE):
                             SET {THEME_COLUMN} = %s
                             WHERE {ID_COLUMN} = %s
                             """,
-                            (row["new_theme"], row[ID_COLUMN])
+                            (row["new_theme"].strip(), row[ID_COLUMN])
                         )
 
-            offset += batch_size
+            # Set last processed ID
+            last_id = int(df[ID_COLUMN].max())
             batch_num += 1
 
     finally:
         conn.close()
         logging.info("🔌 PostgreSQL connection closed.")
-
 
 # === ENTRY POINT ===
 if __name__ == "__main__":
