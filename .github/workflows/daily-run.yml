@@ -30,10 +30,10 @@ jobs:
       - name: Run all scripts (single log, colors, fail only if all fail)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-	  DB_USER: ${{ secrets.DB_USER }}
-	  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-	  DB_HOST: ${{ secrets.DB_HOST }}
-	  DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           FAIL_COUNT=0
           TS=$(date +"%Y-%m-%d_%H-%M-%S")
