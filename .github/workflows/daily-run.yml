@@ -34,6 +34,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
+          OPENAI_FINE_TUNED_MODEL: ${{ secrets.OPENAI_FINE_TUNED_MODEL }}
         run: |
           FAIL_COUNT=0
           TS=$(date +"%Y-%m-%d_%H-%M-%S")
