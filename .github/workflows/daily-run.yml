@@ -17,7 +17,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.10"
+
+      - name: Upgrade pip tooling
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
 
       - name: Install dependencies
         run: |
@@ -26,7 +30,10 @@ jobs:
       - name: Run all scripts (single log, colors, fail only if all fail)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+	  DB_USER: ${{ secrets.DB_USER }}
+	  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+	  DB_HOST: ${{ secrets.DB_HOST }}
+	  DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           FAIL_COUNT=0
           TS=$(date +"%Y-%m-%d_%H-%M-%S")
