@@ -1,0 +1,81 @@
+name: Daily Script Run
+
+on:
+  schedule:
+    # Runs every day at 15:30 UTC (9:00 PM IST)
+    - cron: "30 15 * * *"
+
+jobs:
+  run-scripts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run all scripts (single log, colors, fail only if all fail)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          FAIL_COUNT=0
+          TS=$(date +"%Y-%m-%d_%H-%M-%S")
+          LOGFILE="run_log_${TS}.log"
+
+          GREEN='\033[0;32m'
+          RED='\033[0;31m'
+          YELLOW='\033[1;33m'
+          NC='\033[0m' # No Color
+
+          echo "===== RUN STARTED AT ${TS} =====" | tee -a "$LOGFILE"
+
+          echo -e "${YELLOW}▶ Running audio_transcription.py...${NC}" | tee -a "$LOGFILE"
+          python3 audio_transcription.py >> "$LOGFILE" 2>&1 \
+            && echo -e "${GREEN}✅ audio_transcription.py succeeded${NC}" | tee -a "$LOGFILE" \
+            || { echo -e "${RED}❌ audio_transcription.py failed${NC}" | tee -a "$LOGFILE"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+
+          echo -e "${YELLOW}▶ Running small_talk_classify.py...${NC}" | tee -a "$LOGFILE"
+          python3 small_talk_classify.py >> "$LOGFILE" 2>&1 \
+            && echo -e "${GREEN}✅ small_talk_classify.py succeeded${NC}" | tee -a "$LOGFILE" \
+            || { echo -e "${RED}❌ small_talk_classify.py failed${NC}" | tee -a "$LOGFILE"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+
+          echo -e "${YELLOW}▶ Running theme_reclassification.py...${NC}" | tee -a "$LOGFILE"
+          python3 theme_reclassification.py >> "$LOGFILE" 2>&1 \
+            && echo -e "${GREEN}✅ theme_reclassification.py succeeded${NC}" | tee -a "$LOGFILE" \
+            || { echo -e "${RED}❌ theme_reclassification.py failed${NC}" | tee -a "$LOGFILE"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+
+          echo "===== RUN COMPLETED =====" | tee -a "$LOGFILE"
+
+          if [ "$FAIL_COUNT" -eq 3 ]; then
+            echo -e "${RED}🚨 All scripts failed — marking job as failed.${NC}" | tee -a "$LOGFILE"
+            exit 1
+          else
+            echo -e "${GREEN}✅ At least one script succeeded.${NC}" | tee -a "$LOGFILE"
+          fi
+
+      - name: Upload log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: script-log-${{ github.run_id }}
+          path: |
+            run_log_*.log
+
+  cleanup-old-runs:
+    runs-on: ubuntu-latest
+    needs: run-scripts
+    steps:
+      - name: Delete workflow runs older than last 7
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_runs: 7
+          delete_workflow_pattern: "Daily Script Run"
+

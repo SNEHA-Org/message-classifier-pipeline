@@ -1,0 +1,8 @@
+python-dotenv>=1.1,<2.0
+openai>=1.99,<2.0
+pandas>=1.5,<2.0
+psycopg2-binary>=2.9,<3.0
+requests>=2.31,<3.0
+SQLAlchemy>=2.0,<3.0
+tqdm>=4.64,<5.0
+
