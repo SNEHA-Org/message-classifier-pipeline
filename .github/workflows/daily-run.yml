@@ -97,6 +97,6 @@ jobs:
       - name: Delete workflow runs older than last 7
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          retain_runs: 7
+          retain_days: 7
           delete_workflow_pattern: "Daily Script Run"
 
