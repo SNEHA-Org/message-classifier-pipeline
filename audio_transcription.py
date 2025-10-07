@@ -2,19 +2,19 @@ import os
 import pandas as pd
 import openai
 import logging
-import psycopg2
 import requests
 from openai import OpenAI
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
-from time import sleep
+from time import sleep, time
+from datetime import timedelta
 from tempfile import NamedTemporaryFile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # =================== CONFIGURATION ===================
 
 TABLE_NAME = "glific_messages_funnel_test"
-SCHEMA_NAME = "prod"
+SCHEMA_NAME = "abhishek"
 TEXT_COLUMN = "body_final"
 PHONETIC_COLUMN = "body_final_phonetic"
 ID_COLUMN = "id"
@@ -119,13 +119,6 @@ def parallel_transcribe(df):
 def fetch_batch():
     print("🔄 Fetching a batch...")
     try:
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
         query = f"""
             SELECT {ID_COLUMN}, {MEDIA_URL_COLUMN}
             FROM {SCHEMA_NAME}.{TABLE_NAME}
@@ -135,8 +128,7 @@ def fetch_batch():
             ORDER BY {ID_COLUMN}
             LIMIT {BATCH_SIZE}
         """
-        df = pd.read_sql_query(query, con=conn)
-        conn.close()
+        df = pd.read_sql_query(query, con=engine)
         print(f"📥 Rows fetched: {len(df)}")
         return df
     except Exception as e:
@@ -167,17 +159,37 @@ def update_transcriptions(df):
 
 # =================== PROCESSING LOOP ===================
 
+def format_duration(seconds):
+    """Format duration in seconds to human-readable format"""
+    duration = timedelta(seconds=int(seconds))
+    hours, remainder = divmod(duration.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if duration.days > 0:
+        return f"{duration.days}d {hours}h {minutes}m {seconds}s"
+    elif hours > 0:
+        return f"{hours}h {minutes}m {seconds}s"
+    elif minutes > 0:
+        return f"{minutes}m {seconds}s"
+    else:
+        return f"{seconds}s"
+
 def process_all_rows():
     print("🚀 Starting multilingual transcription process...")
+    start_time = time()
+    
     total_fetched = 0
     total_success = 0
     total_failures = []
+    batch_count = 0
 
     while True:
+        batch_start_time = time()
         df = fetch_batch()
         if df.empty:
             break
 
+        batch_count += 1
         total_fetched += len(df)
         df_transcribed, failures = parallel_transcribe(df)
         df_transcribed = df_transcribed[df_transcribed[TEXT_COLUMN].notnull()]
@@ -186,14 +198,26 @@ def process_all_rows():
         total_success += len(df_transcribed)
         total_failures.extend(failures)
 
-        print(f"✅ Batch complete: {len(df_transcribed)} transcribed, {len(failures)} failed.\n")
+        batch_duration = time() - batch_start_time
+        print(f"✅ Batch {batch_count} complete: {len(df_transcribed)} transcribed, {len(failures)} failed. (took {format_duration(batch_duration)})\n")
         sleep(SLEEP_BETWEEN_BATCHES)
 
+    # Calculate total duration
+    total_duration = time() - start_time
+    
     # Final Summary
     print("\n================== 📊 SUMMARY ==================")
     print(f"Total rows fetched:       {total_fetched}")
     print(f"Successfully transcribed: {total_success}")
     print(f"Failed transcriptions:    {len(total_failures)}")
+    print(f"Total batches processed:  {batch_count}")
+    print(f"Total duration:           {format_duration(total_duration)}")
+    
+    # Calculate average time per audio if any were processed
+    if total_success > 0:
+        avg_time_per_audio = total_duration / total_success
+        print(f"Average time per audio:   {avg_time_per_audio:.2f}s")
+    
     if total_failures:
         print(f"❌ Failed IDs: {total_failures}")
     print("================================================")
