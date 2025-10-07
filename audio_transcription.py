@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =================== CONFIGURATION ===================
 
 TABLE_NAME = "glific_messages_funnel_test"
-SCHEMA_NAME = "abhishek"
+SCHEMA_NAME = "prod"
 TEXT_COLUMN = "body_final"
 PHONETIC_COLUMN = "body_final_phonetic"
 ID_COLUMN = "id"
