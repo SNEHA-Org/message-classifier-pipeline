@@ -132,6 +132,7 @@ def fetch_batch():
             WHERE {MESSAGE_TYPE_COLUMN} = 'audio'
               AND {TEXT_COLUMN} IS NULL
               AND {MEDIA_URL_COLUMN} IS NOT NULL
+              AND {MEDIA_URL_COLUMN} NOT ILIKE '%gupshup%'
             ORDER BY {ID_COLUMN}
             LIMIT {BATCH_SIZE}
         """
